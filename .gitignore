@@ -102,3 +102,6 @@ venv.bak/
 
 # mypy
 .mypy_cache/
+
+# exclude data from source control by default
+/notebooks/logs/
