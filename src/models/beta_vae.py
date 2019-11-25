@@ -4,23 +4,15 @@ import numpy as np
 import random
 import datetime
 
-def rounded_accuracy(y_true, y_pred):
-    return keras.metrics.binary_accuracy(tf.round(y_true), tf.round(y_pred))
-
-# build custom regularizer for KL-Divergence
+# build custom sampling function
 K = keras.backend
-kl_divergence = keras.losses.kullback_leibler_divergence
 
-class KLDivergenceRegularizer(keras.regularizers.Regularizer):
-    def __init__(self, weight, target=0.1):
-        self.weight = weight
-        self.target = target
-    def __call__(self, inputs):
-        mean_activities = K.mean(inputs, axis=0)
-        return self.weight * (
-            kl_divergence(self.target, mean_activities) +
-            kl_divergence(1. - self.target, 1. - mean_activities))
-    
+class Sampling(keras.layers.Layer):
+    def call(self, inputs):
+        mean, log_var = inputs
+        return K.random_normal(tf.shape(log_var)) * K.exp(log_var / 2) + mean
+
+# rounded accuracy for the metric
 def rounded_accuracy(y_true, y_pred):
     return keras.metrics.binary_accuracy(tf.round(y_true), tf.round(y_pred))
 
@@ -29,27 +21,38 @@ def model_fit(X_train_slim, X_val_slim, seed=42, epochs=500, earlystop_patience=
     tf.random.set_seed(seed)
     np.random.seed(seed)
 
-    kld_reg = KLDivergenceRegularizer(weight=0.05, target=0.1)
-    sparse_kl_encoder = keras.models.Sequential([
-        keras.layers.Flatten(input_shape=[28, 28]),
-        keras.layers.Dense(100, activation="selu"),
-        keras.layers.Dense(300, activation="sigmoid", activity_regularizer=kld_reg)
-    ])
-    sparse_kl_decoder = keras.models.Sequential([
-        keras.layers.Dense(100, activation="selu", input_shape=[300]),
-        keras.layers.Dense(28 * 28, activation="sigmoid"),
-        keras.layers.Reshape([28, 28])
-    ])
-    sparse_kl_ae = keras.models.Sequential([sparse_kl_encoder, sparse_kl_decoder])
-    sparse_kl_ae.compile(loss="binary_crossentropy", optimizer=keras.optimizers.Adam(),
-                  metrics=[rounded_accuracy])
+    codings_size = 10
+    beta_value = 0.25
 
-    # show summary, if wanted
-    # sparse_kl_encoder.summary()
-    # sparse_kl_decoder.summary()
+    inputs = keras.layers.Input(shape=[28, 28])
+    z = keras.layers.Flatten()(inputs)
+    z = keras.layers.Dense(150, activation="selu")(z)
+    z = keras.layers.Dense(100, activation="selu")(z)
+    codings_mean = keras.layers.Dense(codings_size)(z)
+    codings_log_var = keras.layers.Dense(codings_size)(z)
+    codings = Sampling()([codings_mean, codings_log_var])
+    variational_encoder_beta = keras.models.Model(
+        inputs=[inputs], outputs=[codings_mean, codings_log_var, codings])
+
+    decoder_inputs = keras.layers.Input(shape=[codings_size])
+    x = keras.layers.Dense(100, activation="selu")(decoder_inputs)
+    x = keras.layers.Dense(150, activation="selu")(x)
+    x = keras.layers.Dense(28 * 28, activation="sigmoid")(x)
+    outputs = keras.layers.Reshape([28, 28])(x)
+    variational_decoder_beta = keras.models.Model(inputs=[decoder_inputs], outputs=[outputs])
+
+    _, _, codings = variational_encoder_beta(inputs)
+    reconstructions = variational_decoder_beta(codings)
+    variational_ae_beta = keras.models.Model(inputs=[inputs], outputs=[reconstructions])
+
+    latent_loss = -0.5 * beta_value * K.sum(
+        1 + codings_log_var - K.exp(codings_log_var) - K.square(codings_mean),
+        axis=-1)
+    variational_ae_beta.add_loss(K.mean(latent_loss) / 784.)
+    variational_ae_beta.compile(loss="binary_crossentropy", optimizer="rmsprop", metrics=[rounded_accuracy])
 
     # use tensorboard to track training
-    log_dir="logs/" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir="logs/" +str('vae_')+ datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, 
                                                           histogram_freq=0,
                                                           update_freq='epoch',
@@ -59,7 +62,7 @@ def model_fit(X_train_slim, X_val_slim, seed=42, epochs=500, earlystop_patience=
                                                           patience=8, 
                                                           restore_best_weights=True)
 
-    history = sparse_kl_ae.fit(X_train_slim, X_train_slim, epochs=epochs,
+    history = variational_ae_beta.fit(X_train_slim, X_train_slim, epochs=epochs,
                                validation_data=[X_val_slim, X_val_slim], 
                                callbacks=[tensorboard_callback,earlystop_callback],verbose=verbose)
-    return sparse_kl_ae
+    return variational_ae_beta
