@@ -16,13 +16,11 @@ class Sampling(keras.layers.Layer):
 def rounded_accuracy(y_true, y_pred):
     return keras.metrics.binary_accuracy(tf.round(y_true), tf.round(y_pred))
 
-def model_fit(X_train_slim, X_val_slim, seed=42, epochs=500, earlystop_patience=8, verbose=0):
+def model_fit(X_train_slim, X_val_slim, beta_value=0.25, codings_size=10, seed=42, epochs=500, earlystop_patience=8, verbose=0):
 
     tf.random.set_seed(seed)
     np.random.seed(seed)
 
-    codings_size = 10
-    beta_value = 0.25
 
     inputs = keras.layers.Input(shape=[28, 28])
     z = keras.layers.Flatten()(inputs)
@@ -59,7 +57,7 @@ def model_fit(X_train_slim, X_val_slim, seed=42, epochs=500, earlystop_patience=
                                                           profile_batch=0)
 
     earlystop_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                          patience=8, 
+                                                          patience=earlystop_patience, 
                                                           restore_best_weights=True)
 
     history = variational_ae_beta.fit(X_train_slim, X_train_slim, epochs=epochs,

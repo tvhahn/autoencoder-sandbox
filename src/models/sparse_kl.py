@@ -49,14 +49,14 @@ def model_fit(X_train_slim, X_val_slim, seed=42, epochs=500, earlystop_patience=
     # sparse_kl_decoder.summary()
 
     # use tensorboard to track training
-    log_dir="logs/"+"skl" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
+    log_dir="logs/"+"skl_" + datetime.datetime.now().strftime("%Y%m%d-%H%M%S")
     tensorboard_callback = tf.keras.callbacks.TensorBoard(log_dir=log_dir, 
                                                           histogram_freq=0,
                                                           update_freq='epoch',
                                                           profile_batch=0)
 
     earlystop_callback = tf.keras.callbacks.EarlyStopping(monitor='val_loss',
-                                                          patience=8, 
+                                                          patience=earlystop_patience, 
                                                           restore_best_weights=True)
 
     history = sparse_kl_ae.fit(X_train_slim, X_train_slim, epochs=epochs,

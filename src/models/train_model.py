@@ -29,8 +29,8 @@ fashion_mnist = keras.datasets.fashion_mnist
 
 run_no = 1
 
-for class_normal in range(0,10):
-    for i in range(0,50):
+for class_normal in range(6,7):
+    for i in range(0,5):
         ### DATA PREP ####
         print('Run no: ', run_no, ' Class: ', class_normal)
 
@@ -55,17 +55,28 @@ for class_normal in range(0,10):
         ### TRY MODELS ###
 
         # SPARSE-KL
-        sparse_kl_ae = sparse_kl.model_fit(X_train_slim, X_val_slim, seed=random_int, epochs=500, earlystop_patience=8, verbose=0)
-        recon_check = threshold.SelectThreshold(sparse_kl_ae, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "sparse_kl")
+        # sparse_kl_ae = sparse_kl.model_fit(X_train_slim, X_val_slim, seed=random_int, epochs=500, earlystop_patience=8, verbose=0)
+        # recon_check = threshold.SelectThreshold(sparse_kl_ae, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "sparse_kl")
+        # df = recon_check.compare_error_method(show_results=False, grid_iterations=100)
+        # df_all = df_all.append(df)
+
+        # BETA-VAE
+        beta_vae_model = beta_vae.model_fit(X_train_slim, X_val_slim, beta_value=10, codings_size=10, seed=random_int, epochs=500, earlystop_patience=250, verbose=0)
+        recon_check = threshold.SelectThreshold(beta_vae_model, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "beta-vae_beta=10_early-stop=120")
         df = recon_check.compare_error_method(show_results=False, grid_iterations=100)
         df_all = df_all.append(df)
 
         # BETA-VAE
-        beta_vae_model = beta_vae.model_fit(X_train_slim, X_val_slim, seed=random_int, epochs=500, earlystop_patience=10, verbose=0)
-        recon_check = threshold.SelectThreshold(beta_vae_model, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "beta_vae")
+        beta_vae_model = beta_vae.model_fit(X_train_slim, X_val_slim, beta_value=5, codings_size=5, seed=random_int, epochs=500, earlystop_patience=120, verbose=0)
+        recon_check = threshold.SelectThreshold(beta_vae_model, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "beta-vae_beta=5_early-stop=120_size=5")
         df = recon_check.compare_error_method(show_results=False, grid_iterations=100)
         df_all = df_all.append(df)
 
+        # BETA-VAE
+        beta_vae_model = beta_vae.model_fit(X_train_slim, X_val_slim, beta_value=5, codings_size=15, seed=random_int, epochs=500, earlystop_patience=120, verbose=0)
+        recon_check = threshold.SelectThreshold(beta_vae_model, X_val, y_val, X_val_slim, class_to_remove, class_normal, class_names, "beta-vae_beta=5_early-stop=120_size=15")
+        df = recon_check.compare_error_method(show_results=False, grid_iterations=100)
+        df_all = df_all.append(df)
 
         
         run_no += 1
@@ -73,4 +84,4 @@ for class_normal in range(0,10):
 print(df_all.head())
 
 # save the dataframe of the results
-df_all.to_csv('results_1.csv')
+df_all.to_csv('results_2.csv')
